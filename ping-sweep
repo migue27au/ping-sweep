@@ -1,0 +1,178 @@
+#!/usr/bin/python3
+
+import subprocess, sys, re
+import socket, struct
+import numpy
+import threading
+import time
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+solaris_ttl = 254
+windows_ttl = 128
+linux_ttl = 64
+
+usage = "Usage: ping-sweep <IPv4 address>/<netmask> [options]\n    Use ping-sweep -h to see help."
+help_usage = usage.split("\n")[0] + "\n    Example: ping-sweep 192.168.0.1/24\n    Options:\n\t-T<0-5>\tTimeout. Higher number means faster but may cause undetections.\n\t-v\tVerbose.\n\t-O\tOS discovery (TTL)."
+cidr_pattern = re.compile("^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$")
+
+threads = []
+hosts_up = []
+
+def variables_definition(argv):
+	global os_detection, verbose, timeout, network, bits, netmask, num_hosts
+	try:
+		os_detection = False
+		verbose = False
+		timeout = 5
+
+		cidr = argv[0]
+		if len(argv) > 1:
+			argv = argv[1:]
+			for arg in argv:				
+				if "-v" in arg:
+					verbose = True
+				elif "-T" in arg:
+					if len(arg) == 3:
+						if arg[2] == '0':
+							timeout = 5
+						elif arg[2] == '1':
+							timeout = 2
+						elif arg[2] == '2':
+							timeout = 1
+						elif arg[2] == '3':
+							timeout = 0.2
+						elif arg[2] == '4':
+							timeout = 0.1
+						elif arg[2] == '5':
+							timeout = 0.05
+						else:
+							print(bcolors.WARNING + "[!] " + bcolors.ENDC + usage)
+							exit(1)
+					else:
+						print(bcolors.WARNING + "[!] " + bcolors.ENDC + usage)
+						exit(1)
+				elif "-O" in arg:
+					os_detection = True
+				else:
+					print(bcolors.WARNING + "[!] " + bcolors.ENDC + usage)
+					exit(1)
+
+		cidr_match = cidr_pattern.match(cidr)
+		if cidr_match == False:
+			print(bcolors.WARNING + "[!] " + bcolors.ENDC + usage)
+			exit(1)
+
+		network, bits = cidr.split('/')
+		netmask = socket.inet_ntoa(struct.pack('!I', (1 << 32) - (1 << (32-int(bits)))))
+		
+		network = [int(x) for x in network.split(".")]
+		netmask = [int(x) for x in netmask.split(".")]
+		num_hosts = pow(2, 32-int(bits))
+		for i in range(len(network)):
+			network[i] = network[i]&netmask[i]
+	except ValueError:
+		print(bcolors.WARNING + "[!] " + bcolors.ENDC + usage)
+		exit(1)
+
+def send_icmp_echo(target_ip):
+	target_ip = str(target_ip[0])+"."+str(target_ip[1])+"."+str(target_ip[2])+"."+str(target_ip[3])
+	#print(target_ip)
+	cmd = "timeout " + str(timeout) + " bash -c \"ping " + target_ip + " | head -n2 | tail -n1 | cut -d ' ' -f 6 | cut -d '=' -f 2\""
+	ttl = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+	if len(str(ttl.stdout)) > 3 and "Unreachable" not in str(ttl.stdout) and "0 received" not in str(ttl.stdout):
+		ttl = int(str(ttl.stdout)[2:-3])
+		if os_detection == True:
+			hosts_up.append([target_ip, ttl])
+		else:
+			hosts_up.append(target_ip)
+		if verbose == True:
+			if os_detection == True:
+				print(bcolors.OKCYAN + "[v]" + bcolors.ENDC + "\tHost up: " + target_ip + bcolors.OKBLUE + " - " + bcolors.ENDC + str(ttl))
+			else:
+				print(bcolors.OKCYAN + "[v]" + bcolors.ENDC + "\tHost up: " + target_ip)
+
+
+def sort_key(k):
+	if len(k) > 0:
+		return k
+	else:
+		return k[0]
+
+def show_output():
+	hosts_up.sort(key=sort_key)
+	for host in hosts_up:
+		if os_detection == False:
+			print(bcolors.OKGREEN + "[+] " + bcolors.ENDC + host + bcolors.OKGREEN)
+		else:
+			ttl = host[1]
+			if ttl > solaris_ttl:
+				print(bcolors.OKGREEN + "[+] " + bcolors.ENDC + host[0] + bcolors.OKBLUE + " - " + bcolors.ENDC +"unknown")
+			if ttl > windows_ttl and ttl <= solaris_ttl:
+				print(bcolors.OKGREEN + "[+] " + bcolors.ENDC + host[0] + bcolors.OKBLUE + " - " + bcolors.ENDC +"solaris")
+			elif ttl > linux_ttl and ttl <= windows_ttl:
+				print(bcolors.OKGREEN + "[+] " + bcolors.ENDC + host[0] + bcolors.OKBLUE + " - " + bcolors.ENDC + "windows")
+			elif ttl <= linux_ttl:
+				print(bcolors.OKGREEN + "[+] " + bcolors.ENDC + host[0] + bcolors.OKBLUE + " - " + bcolors.ENDC + "linux")
+
+def main(argv):
+	try:
+		variables_definition(argv)
+
+		if verbose:
+			print(bcolors.OKCYAN + "[v]" + bcolors.ENDC + " network -> " + str(network[0]) + "." + str(network[1]) + "." + str(network[2]) + "." + str(network[3]))
+			print(bcolors.OKCYAN + "[v]" + bcolors.ENDC + " netmask -> " + str(netmask[0]) + "." + str(netmask[1]) + "." + str(netmask[2]) + "." + str(netmask[3]))
+			print(bcolors.OKCYAN + "[v]" + bcolors.ENDC + " hosts to scan ->", num_hosts)
+			print(bcolors.OKCYAN + "[v]" + bcolors.ENDC + " Scan started...")
+
+		hosts = [0,0,0,0]
+		for i in range(num_hosts):
+			
+			target_ip = [network[0]+hosts[0], network[1]+hosts[1], network[2]+hosts[2], network[3]+hosts[3]]
+			string = "thread-"+str(i)
+			t = threading.Thread(target=send_icmp_echo, args=(target_ip, ))
+			threads.append(t)
+			t.start()
+			if hosts[3] < 255:
+				hosts[3] += 1
+			else:
+				hosts[3] = 0
+				if hosts[2] < 255:
+					hosts[2] += 1
+				else:
+					hosts[2] = 0
+					if hosts[1] < 255:
+						hosts[1] += 1
+					else:
+						hosts[1] = 0
+						if hosts[0] < 255:
+							hosts[0] += 1
+
+		#wait for all threads to finish
+		for i in range(len(threads)):
+			threads[i].join()
+		if verbose:
+			print(bcolors.OKCYAN + "[v]" + bcolors.ENDC + " Scan finished")
+		
+		show_output()
+
+	except KeyboardInterrupt:
+		print("\n"+bcolors.FAIL + "[-] " + bcolors.ENDC + "Scan stopped")
+
+if __name__ == "__main__":
+	if len(sys.argv) >= 2:
+		if "-h" in sys.argv[1]:
+			print(bcolors.HEADER + "[?] " + bcolors.ENDC + help_usage)
+			exit(1)
+		main(sys.argv[1:])
+	else:
+		print(bcolors.WARNING + "[!] " + bcolors.ENDC + usage)
