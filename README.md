@@ -1,4 +1,5 @@
-[?] Usage: ping-sweep <IPv4 address>/<netmask> [options]
+#ping-sweep readme
+	[?] Usage: ping-sweep <IPv4 address>/<netmask> [options]
 
 	Example: ping-sweep 192.168.0.1/24
     Options:
