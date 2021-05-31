@@ -2,9 +2,7 @@
 
 import subprocess, sys, re
 import socket, struct
-import numpy
 import threading
-import time
 
 class bcolors:
     HEADER = '\033[95m'
