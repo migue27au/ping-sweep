@@ -22,19 +22,19 @@ windows_ttl = 128
 linux_ttl = 64
 
 usage = "Usage: ping-sweep <IPv4 address>/<netmask> [options]\n    Use ping-sweep -h to see help."
-help_usage = usage.split("\n")[0] + "\n    Example: ping-sweep 192.168.0.1/24\n    Options:\n\t-T<0-5>\tTimeout. Higher number means faster but may cause undetections.\n\t-v\tVerbose.\n\t-O\tOS discovery (TTL)."
+help_usage = usage.split("\n")[0] + "\n    Example: ping-sweep 192.168.0.1/24\n    Options:\n\t-T=<0-5>\tTimeout. Higher number means faster but may cause undetections.\n\t-v\tVerbose.\n\t-O\tOS discovery (TTL).\n\t-o=<file>\tSave output in file."
 cidr_pattern = re.compile("^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$")
 
 threads = []
 hosts_up = []
 
 def variables_definition(argv):
-	global os_detection, verbose, timeout, network, bits, netmask, num_hosts
+	global os_detection, verbose, timeout, network, bits, netmask, num_hosts, out_file_name, out_file 
 	try:
 		os_detection = False
 		verbose = False
 		timeout = 5
-
+		out_file_name = ""
 		cidr = argv[0]
 		if len(argv) > 1:
 			argv = argv[1:]
@@ -42,18 +42,19 @@ def variables_definition(argv):
 				if "-v" in arg:
 					verbose = True
 				elif "-T" in arg:
-					if len(arg) == 3:
-						if arg[2] == '0':
+					if len(arg) == 4 and "=" in arg:
+						arg = arg.split("=")[1]
+						if arg == '0':
 							timeout = 5
-						elif arg[2] == '1':
+						elif arg == '1':
 							timeout = 2
-						elif arg[2] == '2':
+						elif arg == '2':
 							timeout = 1
-						elif arg[2] == '3':
+						elif arg == '3':
 							timeout = 0.2
-						elif arg[2] == '4':
+						elif arg == '4':
 							timeout = 0.1
-						elif arg[2] == '5':
+						elif arg == '5':
 							timeout = 0.05
 						else:
 							print(bcolors.WARNING + "[!] " + bcolors.ENDC + usage)
@@ -63,6 +64,13 @@ def variables_definition(argv):
 						exit(1)
 				elif "-O" in arg:
 					os_detection = True
+				elif "-o" in arg:
+					if len(arg) > 3 and "=" in arg:
+						out_file_name = arg.split("=")[1]
+						out_file = open(out_file_name, "w")
+					else:
+						print(bcolors.WARNING + "[!] " + bcolors.ENDC + usage)
+						exit(1)
 				else:
 					print(bcolors.WARNING + "[!] " + bcolors.ENDC + usage)
 					exit(1)
@@ -95,6 +103,8 @@ def send_icmp_echo(target_ip):
 			hosts_up.append([target_ip, ttl])
 		else:
 			hosts_up.append(target_ip)
+		if out_file_name != "":
+			out_file.write(target_ip + "\n")
 		if verbose == True:
 			if os_detection == True:
 				print(bcolors.OKCYAN + "[v]" + bcolors.ENDC + "\tHost up: " + target_ip + bcolors.OKBLUE + " - " + bcolors.ENDC + str(ttl))
@@ -102,11 +112,15 @@ def send_icmp_echo(target_ip):
 				print(bcolors.OKCYAN + "[v]" + bcolors.ENDC + "\tHost up: " + target_ip)
 
 
-def sort_key(k):
-	if len(k) > 0:
-		return k
+def sort_key(item):
+	sort_string = ""
+	if  isinstance(item, str):
+		sort_string = item
 	else:
-		return k[0]
+		sort_string = str(item[0])
+	sort_string = [int(x) for x in sort_string.split(".")]
+
+	return(sort_string)
 
 def show_output():
 	hosts_up.sort(key=sort_key)
@@ -164,6 +178,9 @@ def main(argv):
 			print(bcolors.OKCYAN + "[v]" + bcolors.ENDC + " Scan finished")
 		
 		show_output()
+
+		if out_file_name != "":
+			out_file.close()
 
 	except KeyboardInterrupt:
 		print("\n"+bcolors.FAIL + "[-] " + bcolors.ENDC + "Scan stopped")
