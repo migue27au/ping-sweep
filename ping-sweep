@@ -25,11 +25,13 @@ usage = "Usage: ping-sweep <IPv4 address>/<netmask> [options]\n    Use ping-swee
 help_usage = usage.split("\n")[0] + "\n    Example: ping-sweep 192.168.0.1/24\n    Options:\n\t-T=<0-5>\tTimeout. Higher number means faster but may cause undetections.\n\t-v\tVerbose.\n\t-O\tOS discovery (TTL).\n\t-o=<file>\tSave output in file."
 cidr_pattern = re.compile("^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$")
 
-threads = []
-hosts_up = []
+
 
 def variables_definition(argv):
 	global os_detection, verbose, timeout, network, bits, netmask, num_hosts, out_file_name, out_file 
+	global threads, hosts_up
+	threads = []
+	hosts_up = []
 	try:
 		os_detection = False
 		verbose = False
@@ -103,8 +105,6 @@ def send_icmp_echo(target_ip):
 			hosts_up.append([target_ip, ttl])
 		else:
 			hosts_up.append(target_ip)
-		if out_file_name != "":
-			out_file.write(target_ip + "\n")
 		if verbose == True:
 			if os_detection == True:
 				print(bcolors.OKCYAN + "[v]" + bcolors.ENDC + "\tHost up: " + target_ip + bcolors.OKBLUE + " - " + bcolors.ENDC + str(ttl))
@@ -179,7 +179,13 @@ def main(argv):
 		
 		show_output()
 
-		if out_file_name != "":
+		if out_file_name != "" and len(hosts_up) > 0:
+			if isinstance(hosts_up[0], str):
+				for host in hosts_up:
+					out_file.write(host + "\n")
+			else:
+				for host in hosts_up:
+					out_file.write(host[0] + "\n") 
 			out_file.close()
 
 	except KeyboardInterrupt:
