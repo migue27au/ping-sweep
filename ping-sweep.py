@@ -86,6 +86,8 @@ def main(argv):
 	try:
 		cidrs = []
 		if args.ips:
+			args.ips = args.ips.split(",")
+
 			for ip in args.ips:
 				ip = ip.replace("'", "")
 				print(ip)
@@ -170,18 +172,18 @@ def main(argv):
 		print("\n"+bcolors.FAIL + "[-] " + bcolors.ENDC + "Scan stopped")
 
 if __name__ == "__main__":
-	if len(sys.argv) >= 2:
-		parser = argparse.ArgumentParser(description="GET NMAP XML FILE INFORMATION")
+	parser = argparse.ArgumentParser(description="GET NMAP XML FILE INFORMATION")
 
-		parser.add_argument('-v', '--verbose', action='store_true', help="Verbose mode")
-		parser.add_argument('-i', '--inputfile', type=argparse.FileType('r'), help="Input file of ips")
-		parser.add_argument('-o', '--outputfile', type=argparse.FileType('w'), help="Ouptut file")
-		parser.add_argument('-O', '--os_detection', action='store_true', help="OS detection (TTL).")
-		parser.add_argument('-T', '--timeout', choices=['0','1','2','3','4','5'], default='3', help="Timing. Higher number means faster but may cause undetections.")
-		parser.add_argument('ips', nargs='?', type=ascii, help="Ips to scan (CIDR)")
+	parser.add_argument('-v', '--verbose', action='store_true', help="Verbose mode")
+	parser.add_argument('-i', '--inputfile', type=argparse.FileType('r'), help="Input file of ips")
+	parser.add_argument('-o', '--outputfile', type=argparse.FileType('w'), help="Ouptut file")
+	parser.add_argument('-O', '--os_detection', action='store_true', help="OS detection (TTL).")
+	parser.add_argument('-T', '--timeout', choices=['0','1','2','3','4','5'], default='3', help="Timing. Higher number means faster but may cause undetections.")
+	parser.add_argument('ips', nargs='?', type=ascii, help="Ips to scan (CIDR)")
 
-		args = parser.parse_args()
+	args = parser.parse_args()
+	if args.inputfile == None and (args.ips == None or len(args.ips) == 0):
+		print("You must specify ips or input file")
 
-		main(args)
-	else:
-		print(bcolors.WARNING + "[!] " + bcolors.ENDC + usage)
+	print(args)
+	main(args)
